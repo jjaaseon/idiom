@@ -1,0 +1,147 @@
+#!/bin/bash
+##基于星际译王和“汉语成语词典”的简单成语接龙游戏
+##基本实现功能，待完善
+##TODO1 保存每次的搜索结果，避免重复输入
+##TODO2 实现向后递归搜索，增大搜索几率，也可用于设置游戏难度
+##TODO3 设置随机数，对同一输入进行随机输出
+##TODO4 游戏结束后显示完整过程
+##TODO5 编写使用帮助,添加help命令
+##TODO6 输入"slip"后输出提示,并使用提示作为用户输入
+##date 2019-05-23
+##author davison
+##version 0.9
+
+# 判断是否可以继续，包括用户输入和程序查找结果
+CONTINUE=0
+
+# 保存用户输入
+USERIDIOM=0
+# 保存程序查找结果
+LOCALIDIOM=0
+# 查找结果的下一个成语，用于提示
+NEXTIDIOM=0
+
+echo "这是一个成语接龙游戏，请输入一个成语开始游戏"
+echo "输入quit可以离开,输入tip获取提示:"
+
+# 检查输入是否符合成语接龙规则
+# return 1 成功;0 失败
+function checkUseIdiom()
+{
+    if [ "$LOCALIDIOM" != 0 ]; then
+        userFirstChar=$(echo $1|cut -c 1-3)
+        localLastChar=$(echo $LOCALIDIOM|rev|cut -c 1-3|rev)
+
+        if [ "$userFirstChar" == "$localLastChar" ]; then
+            echo 1
+        else
+            echo 0
+        fi
+    fi
+}
+
+# 在字典中查找输入的成语
+# return 1 成功;0 失败
+function findIdiom()
+{
+    IDIOM=$(sdcv -n -u "汉语成语词典" "$1"|grep "\-\->"|grep -v "词典"|cut -d ">" -f 2)
+ 
+    if [ "$IDIOM" == "$1" ]; then
+        echo 1
+    else
+        echo 0
+    fi
+}
+
+# 查找输入成语的下一个成语
+# return 查找结果
+# note 如果未找到将返回空值:""
+function continueIdiom()
+{
+    lastChar=$(echo $1|rev|cut -c 1-3|rev)
+    _idiom=$(sdcv -n -u "汉语成语词典" "$lastChar*"|grep -m 2 "\-\->"|grep -v "词典"|cut -d '>' -f 2)
+  
+    echo $_idiom
+}
+
+# 程序主函数,不断检测用户输入
+while [ 1 ]
+do
+    read USERIDIOM
+    if [ "$USERIDIOM" != "quit" ]; then
+        if [ "$USERIDIOM" == "" ]; then
+            echo -ne "输入不能为空！重新输入:"
+            continue
+        fi
+        
+        # 输出程序接上的成语
+        if [ "$USERIDIOM" == "local" ]; then
+            echo "$LOCALIDIOM"
+            echo -ne "继续:"
+            continue
+        fi
+
+        if [ "$LOCALIDIOM" != "0" ]; then
+            if [ "$USERIDIOM" == "tip" ]; then
+               if [ "$NEXTIDIOM" != "0" ];then
+                  echo "$NEXTIDIOM"
+                  echo -ne "继续:"
+                  continue
+               fi
+            else
+                _check=$(checkUseIdiom $USERIDIOM)
+                if [ "$_check" == "0" ]; then
+                    echo -e "输入错误，请接上一个成语的最后一个字符作为开头的成语"
+                    echo -ne "继续:"
+                    continue
+                fi
+            fi
+        fi
+
+        _findInDic=$(findIdiom $USERIDIOM)
+        if [ "$_findInDic" == "1" ]; then
+            # 尝试接上用户的成语
+            _continue=$(continueIdiom $USERIDIOM)
+            _result=0
+            if [ "$_continue" == "" ]; then
+                CONTINUE=0
+            else
+                LOCALIDIOM=$_continue
+                echo -e "$LOCALIDIOM"
+                CONTINUE=1
+            fi
+
+            if [ "$CONTINUE" == "0" ]; then
+                _result="恭喜，你胜利了！"
+            else
+                _next=$(continueIdiom $LOCALIDIOM)
+                if [ "$_next" == "" ]; then
+                    _result="很遗憾,你失败了！"
+                else
+                    NEXTIDIOM=$_next
+                fi
+            fi
+            # 判断和输出结果，询问用户是否继续
+            if [ "$_result" != "0" ]; then
+                echo "$_result"
+                
+                echo -n "输入quit退出,输入任意键和<ENTER>键继续:  "
+                read _go_on
+                if [ "$_go_on" == "quit" ];then
+                    exit 0
+                else
+                    _result=0
+                    LOCALIDIOM=0
+                    NEXTIDIOM=0
+                    echo -ne "继续:"
+                    continue
+                fi
+            fi
+        else 
+            echo -e "抱歉，找不到成语: $USERIDIOM！请确认输入成语。"
+        fi
+        echo -ne "继续:"
+    else
+        exit 0
+    fi
+done
